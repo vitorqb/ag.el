@@ -516,6 +516,22 @@ If called with a prefix, prompts for flags to pass to ag."
 (make-obsolete 'ag-regexp-project-at-point 'ag-project-regexp "0.46")
 
 ;;;###autoload
+(defun ag-on-marked-files (string)
+  "Same as `ag`, but look only for the files marked on the current dired buffer."
+  (interactive (list (ag/read-from-minibuffer "Search string")))
+  (let ((files (if (version< emacs-version "27.0")
+                   (dired-get-marked-files t current-prefix-arg nil nil)
+                 (dired-get-marked-files t current-prefix-arg nil nil t))))
+    (ag/search string default-directory :files files)))
+
+;;;###autoload
+(defun ag-regexp-on-marked-files (string)
+  "Same as `ag-regexp`, but look only for the files marked on the current dired buffer."
+  (interactive (list (ag/read-from-minibuffer "Search regexp")))
+  (let ((files (dired-get-marked-files t current-prefix-arg nil nil t)))
+    (ag/search string default-directory :regexp t :files files)))
+
+;;;###autoload
 (defun ag-dired (dir string)
   "Recursively find files in DIR matching literal search STRING.
 
@@ -530,12 +546,21 @@ See also `ag-dired-regexp'."
   (ag-dired-regexp dir (ag/escape-pcre string)))
 
 ;;;###autoload
-(defun ag-dired-regexp (dir regexp)
+(defun ag-contents-dired (dir string)
+  "Same as `ag-dired`, but look at file contents rather than file paths."
+  (interactive "DDirectory: \nsFile contents pattern: ")
+  (ag-dired-regexp dir (ag/escape-pcre string) t))
+
+;;;###autoload
+(defun ag-dired-regexp (dir regexp &optional match-contents-p)
   "Recursively find files in DIR matching REGEXP.
 REGEXP should be in PCRE syntax, not Emacs regexp syntax.
 
 The REGEXP is matched against the full path to the file, not
 only against the file name.
+
+If `match-contents-p` is non-nil, look at the file contents
+rather than the file full paths.
 
 Results are presented as a `dired-mode' buffer with
 `default-directory' being DIR.
@@ -549,12 +574,16 @@ See also `find-dired'."
                           "*ag dired*"
                         (format "*ag dired pattern:%s dir:%s*" regexp dir)))
          (cmd (if (string= system-type "windows-nt")
-                  (concat ag-executable " " (combine-and-quote-strings ag-dired-arguments " ") " -g \"" regexp "\" "
+                  (concat ag-executable " " (combine-and-quote-strings ag-dired-arguments " ")
+                          (if match-contents-p " -l " " -g ")
+                          "\""  regexp "\" "
                           (shell-quote-argument dir)
                           " | grep -v \"^$\" | sed \"s/'/\\\\\\\\'/g\" | xargs -I '{}' "
                           insert-directory-program " "
                           dired-listing-switches " '{}' &")
-                (concat ag-executable " " (combine-and-quote-strings ag-dired-arguments " ") " -g '" regexp "' "
+                (concat ag-executable " " (combine-and-quote-strings ag-dired-arguments " ")
+                        (if match-contents-p " -l " " -g ")
+                        "'" regexp "' "
                         (shell-quote-argument dir)
                         " | grep -v '^$' | sed s/\\'/\\\\\\\\\\'/g | xargs -I '{}' "
                         insert-directory-program " "
@@ -591,6 +620,13 @@ See also `find-dired'."
         ;; Initialize the process marker; it is used by the filter.
         (move-marker (process-mark proc) 1 (current-buffer)))
       (setq mode-line-process '(":%s")))))
+
+;;;###autoload
+(defun ag-contents-dired-regexp (dir regexp)
+  "Same as `ag-dired-regexp`, but look for regexp in file contents rather
+than in file names."
+  (interactive "DDirectory: \nsFile contents regexp: ")
+  (ag-dired-regexp dir regexp t))
 
 ;;;###autoload
 (defun ag-project-dired (pattern)
